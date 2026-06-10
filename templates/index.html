@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keep运动截图批量生成器</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link href="https://lib.baomitu.com/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .form-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .range-input {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .range-input input {
+            flex: 1;
+        }
+
+        .map-checkbox-list {
+            max-height: 280px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 10px;
+            background: #fff;
+        }
+
+        .map-checkbox-list .form-check {
+            padding: 4px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .map-checkbox-list .form-check:last-child {
+            border-bottom: none;
+        }
+
+        .map-checkbox-list .form-check:hover {
+            background: #f8f9fa;
+        }
+
+        .batch-badge {
+            display: inline-block;
+            background: #0d6efd;
+            color: #fff;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        /* 画廊样式 */
+        .result-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+            max-height: 65vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .gallery-item {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+            transition: box-shadow 0.2s;
+        }
+
+        .gallery-item:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        .gallery-item img {
+            width: 100%;
+            display: block;
+        }
+
+        .gallery-item .caption {
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fafafa;
+            border-top: 1px solid #eee;
+            font-size: 0.9rem;
+        }
+
+        /* 进度条 */
+        .batch-progress {
+            display: none;
+            margin: 16px 0;
+        }
+
+        .batch-progress .progress {
+            height: 24px;
+            border-radius: 12px;
+        }
+
+        .batch-progress .progress-bar {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container py-5">
+        <h1 class="mb-2 text-center">Keep运动截图生成器 <span class="batch-badge">批量版</span></h1>
+        <p class="text-center text-muted mb-4">支持单张和批量随机生成，数据在设定范围内随机变化，地图随机抽取</p>
+
+        <p class="text-center mb-4">
+            原项目地址：<a href="https://github.com/eltsen00/KeepGeneration-Web" target="_blank">KeepGeneration-Web</a>
+        </p>
+
+        <form id="generateForm" enctype="multipart/form-data">
+            <!-- ===== 批量设置 ===== -->
+            <div class="form-section border-primary">
+                <h4>⚙️ 生成设置</h4>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">生成数量</label>
+                        <input type="number" class="form-control form-control-lg" name="count" id="batchCount"
+                            value="1" min="1" max="100" required>
+                        <div class="form-text">设置为1为单张生成，>1为批量生成（最大100张）</div>
+                    </div>
+                    <div class="col-md-7">
+                        <label class="form-label">
+                            🗺️ 地图随机池
+                            <small class="text-muted">（勾选的地图将在生成时随机抽取，连续两张不重复）</small>
+                        </label>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text">文件夹</span>
+                            <input type="text" class="form-control" id="mapFolderInput"
+                                value="static/maps" placeholder="static/maps">
+                            <button type="button" class="btn btn-outline-secondary" id="refreshMapsBtn">🔄 刷新</button>
+                        </div>
+                        <div class="d-flex gap-2 mb-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllMaps">全选</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAllMaps">取消全选</button>
+                            <span class="text-muted align-self-center ms-2" id="selectedMapsCount">已选 0 张</span>
+                        </div>
+                        <div class="map-checkbox-list" id="mapCheckboxList">
+                            <div class="text-center text-muted py-4">点击 🔄 刷新 加载地图</div>
+                        </div>
+                        <input type="hidden" name="map_folder" id="mapFolderHidden" value="static/maps">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 文件上传（头像） ===== -->
+            <div class="form-section">
+                <h4>👤 头像设置</h4>
+                <div class="mb-3">
+                    <label class="form-label">用户头像（可选）</label>
+                    <input type="file" class="form-control" name="avatar" accept="image/*">
+                    <div class="form-text mt-2">不上传将使用默认头像</div>
+                </div>
+            </div>
+
+            <!-- ===== 基础信息 ===== -->
+            <div class="form-section">
+                <h4>📋 基本信息</h4>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="form-control" name="username" value="{{ default_config.username }}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">开始日期</label>
+                        <input type="date" class="form-control" name="date" value="{{ default_config.date }}" required>
+                        <div class="form-text">批量生成时每张自动往后延1天</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">结束时间范围</label>
+                        <div class="range-input">
+                            <input type="time" class="form-control" name="end_time_min" value="{{ default_config.end_time[0] }}" required>
+                            <span>—</span>
+                            <input type="time" class="form-control" name="end_time_max" value="{{ default_config.end_time[1] }}" required>
+                        </div>
+                        <div class="form-text">每次生成在范围内随机取值</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">地点</label>
+                        <input type="text" class="form-control" name="location" value="{{ default_config.location }}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">天气权重（按比例随机）</label>
+                        <div class="d-flex gap-2">
+                            <span class="align-self-center">晴</span>
+                            <input type="number" class="form-control form-control-sm" name="weather_qing" value="{{ default_config.weather_weights['晴'] }}" min="0" style="width:60px">
+                            <span class="align-self-center">多云</span>
+                            <input type="number" class="form-control form-control-sm" name="weather_duoyun" value="{{ default_config.weather_weights['多云'] }}" min="0" style="width:60px">
+                            <span class="align-self-center">阴天</span>
+                            <input type="number" class="form-control form-control-sm" name="weather_yintian" value="{{ default_config.weather_weights['阴天'] }}" min="0" style="width:60px">
+                        </div>
+                        <div class="form-text">权重越高出现概率越大，如 3:5:2 表示 30%/50%/20%</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">温度范围 (°C)</label>
+                        <div class="range-input">
+                            <input type="number" class="form-control" name="temperature_min" value="{{ default_config.temperature[0] }}" required>
+                            <span>—</span>
+                            <input type="number" class="form-control" name="temperature_max" value="{{ default_config.temperature[1] }}" required>
+                        </div>
+                        <div class="form-text">每次生成在范围内随机取值</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 运动参数 ===== -->
+            <div class="form-section">
+                <h4>🏃 运动参数（每次生成在范围内随机取值）</h4>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">总公里数范围 (km)</label>
+                        <div class="range-input">
+                            <input type="number" step="0.01" class="form-control" name="total_km_min"
+                                value="{{ default_config.total_km[0] }}" min="0" required>
+                            <span>—</span>
+                            <input type="number" step="0.01" class="form-control" name="total_km_max"
+                                value="{{ default_config.total_km[1] }}" min="0" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">运动时间范围 (HH:MM:SS)</label>
+                        <div class="range-input">
+                            <input type="text" class="form-control" name="sport_time_min"
+                                value="{{ default_config.sport_time[0] }}" required>
+                            <span>—</span>
+                            <input type="text" class="form-control" name="sport_time_max"
+                                value="{{ default_config.sport_time[1] }}" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">总时间范围 (HH:MM:SS)</label>
+                        <div class="range-input">
+                            <input type="text" class="form-control" name="total_time_min"
+                                value="{{ default_config.total_time[0] }}" required>
+                            <span>—</span>
+                            <input type="text" class="form-control" name="total_time_max"
+                                value="{{ default_config.total_time[1] }}" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">累计爬升范围 (米)</label>
+                        <div class="range-input">
+                            <input type="number" class="form-control" name="cumulative_climb_min"
+                                value="{{ default_config.cumulative_climb[0] }}" min="0" required>
+                            <span>—</span>
+                            <input type="number" class="form-control" name="cumulative_climb_max"
+                                value="{{ default_config.cumulative_climb[1] }}" min="0" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">平均步频范围 (步/分钟)</label>
+                        <div class="range-input">
+                            <input type="number" class="form-control" name="average_cadence_min"
+                                value="{{ default_config.average_cadence[0] }}" min="0" required>
+                            <span>—</span>
+                            <input type="number" class="form-control" name="average_cadence_max"
+                                value="{{ default_config.average_cadence[1] }}" min="0" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">运动负荷范围</label>
+                        <div class="range-input">
+                            <input type="number" class="form-control" name="exercise_load_min"
+                                value="{{ default_config.exercise_load[0] }}" min="0" required>
+                            <span>—</span>
+                            <input type="number" class="form-control" name="exercise_load_max"
+                                value="{{ default_config.exercise_load[1] }}" min="0" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">🔋 电池电量范围 (%)</label>
+                        <div class="range-input">
+                            <input type="number" class="form-control" name="battery_min"
+                                value="{{ default_config.battery[0] }}" min="0" max="100" required>
+                            <span>—</span>
+                            <input type="number" class="form-control" name="battery_max"
+                                value="{{ default_config.battery[1] }}" min="0" max="100" required>
+                        </div>
+                        <div class="form-text">每次生成在范围内随机选取电池图标</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 提交按钮 & 批量进度 -->
+            <div class="d-grid gap-2 mt-4">
+                <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">🚀 开始生成</button>
+            </div>
+
+            <div class="batch-progress" id="batchProgress">
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="fw-bold" id="progressLabel">正在生成...</span>
+                    <span class="text-muted" id="progressCount">0 / 0</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                        id="progressBar" role="progressbar" style="width: 0%">0%</div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- ===== 单张结果模态框 ===== -->
+    <div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">🎉 生成成功！</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="resultImage" src="" class="img-fluid mb-3 shadow-sm rounded" alt="Result">
+                    <div class="d-grid gap-2 col-8 mx-auto">
+                        <a id="downloadBtn" href="#" class="btn btn-success btn-lg">📥 下载原图</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 批量结果模态框 ===== -->
+    <div class="modal fade" id="batchResultModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">🎉 批量生成完成！共 <span id="batchResultCount">0</span> 张</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-muted">每张图片的参数均在设定范围内随机生成，地图随机抽取</span>
+                        <a id="batchDownloadZip" href="#" class="btn btn-success btn-lg">📦 打包下载全部 (ZIP)</a>
+                    </div>
+                    <div class="result-gallery" id="resultGallery">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载中遮罩 -->
+    <div id="loadingOverlay"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.85); z-index:9999; justify-content:center; align-items:center; flex-direction:column;">
+        <div class="spinner-border text-primary mb-3" style="width: 4rem; height: 4rem;" role="status"></div>
+        <h4 class="text-primary" id="loadingText">正在生成运动数据和轨迹...</h4>
+        <p class="text-muted mt-1" id="loadingSubtext"></p>
+    </div>
+
+    <script src="https://lib.baomitu.com/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ==================== 地图动态加载 ====================
+        const mapCheckboxList = document.getElementById('mapCheckboxList');
+        const mapFolderInput = document.getElementById('mapFolderInput');
+        const mapFolderHidden = document.getElementById('mapFolderHidden');
+        const refreshMapsBtn = document.getElementById('refreshMapsBtn');
+        const selectedMapsCount = document.getElementById('selectedMapsCount');
+        const batchCountInput = document.getElementById('batchCount');
+        const submitBtn = document.getElementById('submitBtn');
+
+        async function loadMapList() {
+            const folder = mapFolderInput.value.trim() || 'static/maps';
+            mapFolderHidden.value = folder;
+            mapCheckboxList.innerHTML = '<div class="text-center text-muted py-4">加载中...</div>';
+            try {
+                const resp = await fetch(`/api/list_maps?folder=${encodeURIComponent(folder)}`);
+                const data = await resp.json();
+                if (!data.success) {
+                    mapCheckboxList.innerHTML = `<div class="text-center text-danger py-2">${data.error || '加载失败'}</div>`;
+                    return;
+                }
+                if (data.files.length === 0) {
+                    mapCheckboxList.innerHTML = '<div class="text-center text-muted py-2">文件夹为空或无图片</div>';
+                    updateSelectedCount();
+                    return;
+                }
+                let html = '';
+                data.files.forEach((f, idx) => {
+                    html += `
+                        <div class="form-check">
+                            <input class="form-check-input map-checkbox" type="checkbox"
+                                name="map_pool" value="${f.name}" id="map_${idx}" checked>
+                            <label class="form-check-label" for="map_${idx}">${f.name}</label>
+                        </div>`;
+                });
+                mapCheckboxList.innerHTML = html;
+
+                // 重新绑定事件
+                document.querySelectorAll('.map-checkbox').forEach(cb => {
+                    cb.addEventListener('change', updateSelectedCount);
+                });
+
+                updateSelectedCount();
+            } catch (e) {
+                mapCheckboxList.innerHTML = '<div class="text-center text-danger py-2">网络错误</div>';
+            }
+        }
+
+        refreshMapsBtn.addEventListener('click', loadMapList);
+
+        function updateSelectedCount() {
+            const checked = document.querySelectorAll('.map-checkbox:checked').length;
+            selectedMapsCount.textContent = `已选 ${checked} 张`;
+        }
+
+        function updateSubmitButton() {
+            const count = parseInt(batchCountInput.value) || 1;
+            submitBtn.innerHTML = count === 1
+                ? '🚀 生成运动数据图'
+                : `🚀 批量生成 ${count} 张运动数据图`;
+        }
+
+        // 全选 / 取消全选
+        document.getElementById('selectAllMaps').addEventListener('click', function () {
+            document.querySelectorAll('.map-checkbox').forEach(cb => cb.checked = true);
+            updateSelectedCount();
+        });
+        document.getElementById('deselectAllMaps').addEventListener('click', function () {
+            document.querySelectorAll('.map-checkbox').forEach(cb => cb.checked = false);
+            updateSelectedCount();
+        });
+
+        batchCountInput.addEventListener('input', updateSubmitButton);
+
+        // 页面加载时自动加载地图
+        loadMapList();
+        updateSubmitButton();
+
+        // ==================== 表单提交逻辑 ====================
+        document.getElementById('generateForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const count = parseInt(batchCountInput.value) || 1;
+            const checkedMaps = document.querySelectorAll('.map-checkbox:checked');
+
+            // 验证：至少选一张地图
+            if (checkedMaps.length === 0) {
+                alert('请至少勾选一张地图！');
+                return;
+            }
+
+            const loading = document.getElementById('loadingOverlay');
+            const loadingText = document.getElementById('loadingText');
+            const loadingSubtext = document.getElementById('loadingSubtext');
+            const batchProgress = document.getElementById('batchProgress');
+            const progressBar = document.getElementById('progressBar');
+            const progressCount = document.getElementById('progressCount');
+            const progressLabel = document.getElementById('progressLabel');
+
+            loading.style.display = 'flex';
+            submitBtn.disabled = true;
+
+            if (count > 1) {
+                // 批量模式 - 显示进度条
+                batchProgress.style.display = 'block';
+                loadingText.textContent = '正在批量生成运动截图...';
+                loadingSubtext.textContent = `共 ${count} 张，请耐心等待`;
+            } else {
+                batchProgress.style.display = 'none';
+                loadingText.textContent = '正在生成运动数据和轨迹...';
+                loadingSubtext.textContent = '';
+            }
+
+            try {
+                const formData = new FormData(this);
+
+                if (count === 1) {
+                    // ===== 单张生成（使用原接口） =====
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        document.getElementById('resultImage').src = data.image_url;
+                        document.getElementById('downloadBtn').href = data.download_url;
+                        new bootstrap.Modal(document.getElementById('resultModal')).show();
+                    } else {
+                        alert('生成失败: ' + (data.error || '未知错误'));
+                    }
+                } else {
+                    // ===== 批量生成 =====
+                    const response = await fetch('/api/batch_generate', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        // 填充画廊
+                        const gallery = document.getElementById('resultGallery');
+                        gallery.innerHTML = '';
+
+                        data.images.forEach(img => {
+                            const item = document.createElement('div');
+                            item.className = 'gallery-item';
+                            item.innerHTML = `
+                                        <img src="${img.url}" alt="第${img.index}张" loading="lazy">
+                                        <div class="caption">
+                                            <span><strong>#${img.index}</strong> <small class="text-muted">${img.date || ''} · ${img.map_used}</small></span>
+                                            <a href="${img.url}" class="btn btn-sm btn-outline-primary" download>📥 下载</a>
+                                        </div>
+                                    `;
+                            gallery.appendChild(item);
+                        });
+
+                        document.getElementById('batchResultCount').textContent = data.count;
+
+                        // ZIP下载按钮
+                        const zipBtn = document.getElementById('batchDownloadZip');
+                        if (data.zip_url) {
+                            zipBtn.href = data.zip_url;
+                            zipBtn.style.display = 'inline-block';
+                        } else {
+                            zipBtn.style.display = 'none';
+                        }
+
+                        new bootstrap.Modal(document.getElementById('batchResultModal')).show();
+                    } else {
+                        alert('批量生成失败: ' + (data.error || '未知错误'));
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('网络请求出错，请检查控制台');
+            } finally {
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+                batchProgress.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+
+</html>
