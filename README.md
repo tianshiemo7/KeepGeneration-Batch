@@ -2,10 +2,13 @@
 
 基于 [KeepGeneration-Web](https://github.com/eltsen00/KeepGeneration-Web) 开发的**批量版**，支持在指定范围内随机生成多张Keep风格跑步截图。
 
-## 🚀 在线体验
+## 🚀 快速开始
 
-[立即使用](https://keep.hshoe.cn)
-无需安装，打开即用
+```bash
+pip install flask pillow
+python app.py
+```
+浏览器打开 **http://localhost:5010** 即可使用
 
 ## ✨ 相比原项目新增功能
 
